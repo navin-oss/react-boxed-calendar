@@ -29,6 +29,14 @@ export interface CalendarProps {
   highlightToday?: boolean;
   weekStartsOn?: 0 | 1; // 0 = Sunday, 1 = Monday
 
+  // Holidays
+  holidays?: Date[];
+  holidayColor?: {
+    bg?: string;
+    text?: string;
+    hoverBg?: string;
+  };
+
   // Localization
   locale?: {
     weekDays?: [string, string, string, string, string, string, string];
@@ -53,6 +61,36 @@ export interface CalendarProps {
     disabledText?: string;
 
     borderRadius?: string;
+
+    // Weekend-specific colors
+    sundayBg?: string;
+    sundayText?: string;
+    sundayHoverBg?: string;
+
+    saturdayBg?: string;
+    saturdayText?: string;
+    saturdayHoverBg?: string;
+
+    fridayBg?: string;
+    fridayText?: string;
+    fridayHoverBg?: string;
+
+    thursdayBg?: string;
+    thursdayText?: string;
+    thursdayHoverBg?: string;
+
+    wednesdayBg?: string;
+    wednesdayText?: string;
+    wednesdayHoverBg?: string;
+
+    tuesdayBg?: string;
+    tuesdayText?: string;
+    tuesdayHoverBg?: string;
+
+    mondayBg?: string;
+    mondayText?: string;
+    mondayHoverBg?: string;
+    
   };
 
   // Size
@@ -88,6 +126,13 @@ const Calendar = ({
 
   highlightToday = true,
   weekStartsOn = 0,
+
+  holidays = [],
+  holidayColor = {
+    bg: "bg-red-100",
+    text: "text-red-700",
+    hoverBg: "hover:bg-red-200",
+  },
 
   locale = {
     weekDays: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
@@ -152,6 +197,10 @@ const Calendar = ({
   };
 
   const isToday = (date: Date) => sameDay(date, new Date());
+
+  const isHoliday = (date: Date) => {
+    return holidays.some(holiday => sameDay(holiday, date));
+  };
 
   const dateIsBefore = (a: Date, b: Date) => {
     const dateA = new Date(a);
@@ -414,14 +463,46 @@ const Calendar = ({
         className="grid grid-cols-7 mb-2"
         style={{ gap: gridGap }}
       >
-        {locale.weekDays!.map((d) => (
-          <div
-            key={d}
-            className="text-center font-semibold text-gray-600 text-sm py-2"
-          >
-            {d}
-          </div>
-        ))}
+        {locale.weekDays!.map((d, index) => {
+          // Calculate the actual day of week based on weekStartsOn
+          const dayOfWeek = (index + weekStartsOn) % 7;
+          const isSunday = dayOfWeek === 0;
+          const isSaturday = dayOfWeek === 6;
+          const isMonday = dayOfWeek === 1;
+          const isTuesday = dayOfWeek === 2;
+          const isWednesday = dayOfWeek === 3;
+          const isThursday = dayOfWeek === 4;
+          const isFriday = dayOfWeek === 5;
+          
+          // Determine text color based on custom weekend colors
+          let textColor = "text-gray-600";
+          if (isSunday && resolvedTheme.sundayText) {
+            textColor = resolvedTheme.sundayText;
+          } else if (isSaturday && resolvedTheme.saturdayText) {
+            textColor = resolvedTheme.saturdayText;
+          } else if (isFriday && resolvedTheme.fridayText) {
+            textColor = resolvedTheme.fridayText;
+          } else if (isThursday && resolvedTheme.thursdayText ) {
+            textColor = resolvedTheme.thursdayText;
+          } else if (isWednesday && resolvedTheme.wednesdayText) {
+            textColor = resolvedTheme.wednesdayText;
+          } else if (isTuesday && resolvedTheme.tuesdayText) {
+            textColor = resolvedTheme.tuesdayText;
+          } else if (isMonday && resolvedTheme.mondayText) {
+            textColor = resolvedTheme.mondayText;
+          }
+
+
+          
+          return (
+            <div
+              key={d}
+              className={`text-center font-semibold ${textColor} text-sm py-2`}
+            >
+              {d}
+            </div>
+          );
+        })}
       </div>
 
       {/* Grid - Updated with custom gap and cell sizing */}
@@ -452,6 +533,49 @@ const Calendar = ({
             dateIsAfter(day, selectedRange.start) &&
             dateIsBefore(day, selectedRange.end);
 
+          const dayOfWeek = day.getDay();
+          const isSunday = dayOfWeek === 0;
+          const isSaturday = dayOfWeek === 6;
+          const isMonday = dayOfWeek === 1;
+          const isTuesday = dayOfWeek === 2;
+          const isWednesday = dayOfWeek === 3;
+          const isThursday = dayOfWeek === 4;
+          const isFriday = dayOfWeek === 5;
+          const isHolidayDate = isHoliday(day);
+
+          // Determine base styles based on day type
+          let baseStyles = "";
+          if (disabled) {
+            baseStyles = `${resolvedTheme.disabledBg} ${resolvedTheme.disabledText} cursor-not-allowed`;
+          } else if (isSelected) {
+            baseStyles = `${resolvedTheme.selectedBg} ${resolvedTheme.selectedText} scale-105 shadow-lg`;
+          } else if (isHolidayDate) {
+            baseStyles = `${holidayColor.bg} ${holidayColor.text} ${holidayColor.hoverBg}`;
+          } else if (isToday(day) && highlightToday) {
+            baseStyles = `${resolvedTheme.todayBg} ${resolvedTheme.todayText}`;
+          } else if (isInRange) {
+            baseStyles = "bg-blue-50 text-blue-600";
+          } else if (isSunday && resolvedTheme.sundayBg) {
+            baseStyles = `${resolvedTheme.sundayBg} ${resolvedTheme.sundayText || resolvedTheme.normalText} ${resolvedTheme.sundayHoverBg || resolvedTheme.normalHoverBg} hover:scale-105`;
+          } else if (isSaturday && resolvedTheme.saturdayBg) {
+            baseStyles = `${resolvedTheme.saturdayBg} ${resolvedTheme.saturdayText || resolvedTheme.normalText} ${resolvedTheme.saturdayHoverBg || resolvedTheme.normalHoverBg} hover:scale-105`;
+          } else if (isFriday && resolvedTheme.fridayBg) {
+            baseStyles = `${resolvedTheme.fridayBg} ${resolvedTheme.fridayText || resolvedTheme.normalText} ${resolvedTheme.fridayHoverBg || resolvedTheme.normalHoverBg} hover:scale-105`;
+          } else if (isMonday && resolvedTheme.mondayBg) {
+            baseStyles = `${resolvedTheme.normalText} ${resolvedTheme.normalHoverBg} hover:scale-105`;
+          }
+            else if (isTuesday && resolvedTheme.tuesdayBg) {
+            baseStyles = `${resolvedTheme.tuesdayBg} ${resolvedTheme.tuesdayText || resolvedTheme.normalText} ${resolvedTheme.tuesdayHoverBg || resolvedTheme.normalHoverBg} hover:scale-105`;
+          } else if (isWednesday && resolvedTheme.wednesdayBg) {
+
+            baseStyles = `${resolvedTheme.wednesdayBg} ${resolvedTheme.wednesdayText || resolvedTheme.normalText} ${resolvedTheme.wednesdayHoverBg || resolvedTheme.normalHoverBg} hover:scale-105`;
+          } else if (isThursday && resolvedTheme.thursdayBg) {
+            baseStyles = `${resolvedTheme.thursdayBg} ${resolvedTheme.thursdayText || resolvedTheme.normalText} ${resolvedTheme.thursdayHoverBg || resolvedTheme.normalHoverBg} hover:scale-105`;
+          }
+            else {
+            baseStyles = `${resolvedTheme.normalText} ${resolvedTheme.normalHoverBg} hover:scale-105`;
+          }
+
           return (
             <button
               key={day.toISOString()}
@@ -462,16 +586,7 @@ const Calendar = ({
                 inline-flex items-center justify-center font-medium transition-all
                 ${customSize ? "" : presetCellSize}
                 ${resolvedTheme.borderRadius}
-                ${disabled
-                  ? `${resolvedTheme.disabledBg} ${resolvedTheme.disabledText} cursor-not-allowed`
-                  : isSelected
-                    ? `${resolvedTheme.selectedBg} ${resolvedTheme.selectedText} scale-105 shadow-lg`
-                    : isToday(day) && highlightToday
-                      ? `${resolvedTheme.todayBg} ${resolvedTheme.todayText}`
-                      : isInRange
-                        ? "bg-blue-50 text-blue-600"
-                        : `${resolvedTheme.normalText} ${resolvedTheme.normalHoverBg} hover:scale-105`
-                }
+                ${baseStyles}
               `}
             >
               {day.getDate()}
