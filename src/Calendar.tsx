@@ -22,12 +22,27 @@ export interface CalendarProps {
   disableFutureDates?: boolean;
   disableWeekends?: boolean;
   disableMonthNav?: boolean;
+  // Custom disabled weekdays
+  weekdayOFF?: number[];
+  weekdayOFFColor?: {
+    bg?: string;
+    text?: string;
+    hoverBg?: string;
+  };
 
   // User callback for disabling dates
   isDateDisabled?: (date: Date) => boolean;
 
   highlightToday?: boolean;
   weekStartsOn?: 0 | 1; // 0 = Sunday, 1 = Monday
+
+  // Holidays
+  holidays?: Date[];
+  holidayColor?: {
+    bg?: string;
+    text?: string;
+    hoverBg?: string;
+  };
 
   // Localization
   locale?: {
@@ -53,6 +68,7 @@ export interface CalendarProps {
     disabledText?: string;
 
     borderRadius?: string;
+
   };
 
   // Size
@@ -83,11 +99,24 @@ const Calendar = ({
   disableFutureDates = false,
   disableWeekends = false,
   disableMonthNav = false,
+  weekdayOFF = [],
+  weekdayOFFColor = {
+    bg: "bg-gray-100",
+    text: "text-gray-500",
+    hoverBg: "hover:bg-gray-200",
+  },
 
   isDateDisabled,
 
   highlightToday = true,
   weekStartsOn = 0,
+
+  holidays = [],
+  holidayColor = {
+    bg: "bg-red-100",
+    text: "text-red-700",
+    hoverBg: "hover:bg-red-200",
+  },
 
   locale = {
     weekDays: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
@@ -141,6 +170,22 @@ const Calendar = ({
 
   const gridGap = customSize?.gap ?? 8;
 
+  // Merge holiday color prop with defaults so partial overrides work.
+  const mergedHolidayColor = {
+    bg: "bg-red-100",
+    text: "text-red-700",
+    hoverBg: "hover:bg-red-200",
+    ...holidayColor,
+  };
+  const mergedWeekdayOffColor = {
+    bg: "bg-gray-100",
+    text: "text-gray-500",
+    hoverBg: "hover:bg-gray-200",
+    ...weekdayOFFColor,
+  };
+  // Normalize weekdayOFF into a Set for fast/multiple lookups
+  const weekdayOFFSet = new Set<number>(weekdayOFF ?? []);
+
   // Helpers
   const sameDay = (d1: Date | null, d2: Date | null) => {
     if (!d1 || !d2) return false;
@@ -152,6 +197,10 @@ const Calendar = ({
   };
 
   const isToday = (date: Date) => sameDay(date, new Date());
+
+  const isHoliday = (date: Date) => {
+    return holidays.some(holiday => sameDay(holiday, date));
+  };
 
   const dateIsBefore = (a: Date, b: Date) => {
     const dateA = new Date(a);
@@ -344,8 +393,8 @@ const Calendar = ({
                   type="button"
                   onClick={() => setMonth(index)}
                   className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isCurrent
-                      ? `${resolvedTheme.selectedBg} text-white`
-                      : `${resolvedTheme.normalText} ${resolvedTheme.normalHoverBg}`
+                    ? `${resolvedTheme.selectedBg} text-white`
+                    : `${resolvedTheme.normalText} ${resolvedTheme.normalHoverBg}`
                     }`}
                 >
                   {name}
@@ -396,8 +445,8 @@ const Calendar = ({
                     type="button"
                     onClick={() => setYear(year)}
                     className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isCurrent
-                        ? `${resolvedTheme.selectedBg} text-white`
-                        : `${resolvedTheme.normalText} ${resolvedTheme.normalHoverBg}`
+                      ? `${resolvedTheme.selectedBg} text-white`
+                      : `${resolvedTheme.normalText} ${resolvedTheme.normalHoverBg}`
                       }`}
                   >
                     {year}
@@ -452,6 +501,24 @@ const Calendar = ({
             dateIsAfter(day, selectedRange.start) &&
             dateIsBefore(day, selectedRange.end);
 
+          const isHolidayDate = isHoliday(day);
+          const isWeekdayOff = weekdayOFFSet.has(day.getDay());
+
+          // Determine base styles
+          let baseStyles = isSelected
+            ? `${resolvedTheme.selectedBg} ${resolvedTheme.selectedText} scale-105 shadow-lg`
+            : disabled
+              ? `${resolvedTheme.disabledBg} ${resolvedTheme.disabledText} cursor-not-allowed`
+              : isToday(day) && highlightToday
+                ? `${resolvedTheme.todayBg} ${resolvedTheme.todayText}`
+                : isInRange
+                  ? "bg-blue-50 text-blue-600"
+                  : isWeekdayOff
+                    ? `${mergedWeekdayOffColor.bg} ${mergedWeekdayOffColor.text} ${mergedWeekdayOffColor.hoverBg || ""}`
+                    : isHolidayDate
+                      ? `${mergedHolidayColor.bg} ${mergedHolidayColor.text} ${mergedHolidayColor.hoverBg || ""}`
+                      : `${resolvedTheme.normalText} ${resolvedTheme.normalHoverBg} hover:scale-105`;
+
           return (
             <button
               key={day.toISOString()}
@@ -462,16 +529,7 @@ const Calendar = ({
                 inline-flex items-center justify-center font-medium transition-all
                 ${customSize ? "" : presetCellSize}
                 ${resolvedTheme.borderRadius}
-                ${disabled
-                  ? `${resolvedTheme.disabledBg} ${resolvedTheme.disabledText} cursor-not-allowed`
-                  : isSelected
-                    ? `${resolvedTheme.selectedBg} ${resolvedTheme.selectedText} scale-105 shadow-lg`
-                    : isToday(day) && highlightToday
-                      ? `${resolvedTheme.todayBg} ${resolvedTheme.todayText}`
-                      : isInRange
-                        ? "bg-blue-50 text-blue-600"
-                        : `${resolvedTheme.normalText} ${resolvedTheme.normalHoverBg} hover:scale-105`
-                }
+                ${baseStyles}
               `}
             >
               {day.getDate()}
@@ -493,6 +551,10 @@ const Calendar = ({
               <span className={resolvedTheme.normalText}>Today</span>
             </div>
           )}
+          <div className="flex items-center">
+            <div className={`w-4 h-4 rounded mr-2 ${mergedHolidayColor.bg}`}></div>
+            <span className={mergedHolidayColor.text}>Holiday</span>
+          </div>
         </div>
       )}
 
@@ -505,6 +567,10 @@ const Calendar = ({
           <div className="flex items-center">
             <div className="w-4 h-4 bg-blue-50 border border-blue-200 rounded mr-2"></div>
             <span className={resolvedTheme.normalText}>In Range</span>
+          </div>
+          <div className="flex items-center">
+            <div className={`w-4 h-4 rounded mr-2 ${mergedHolidayColor.bg}`}></div>
+            <span className={mergedHolidayColor.text}>Holiday</span>
           </div>
         </div>
       )}
