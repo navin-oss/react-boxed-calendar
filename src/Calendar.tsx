@@ -1,28 +1,5 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
-import {
-  generateMonthGrid,
-  isDateAfter,
-  isDateBefore,
-  isSameDay,
-  isToday,
-} from "./utils";
-
-export interface CalendarTheme {
-  selectedBg?: string;
-  selectedText?: string;
-  todayBg?: string;
-  todayText?: string;
-  normalText?: string;
-  normalHoverBg?: string;
-  disabledBg?: string;
-  disabledText?: string;
-  borderRadius?: string;
-}
-
-export interface CalendarLocale {
-  weekDays?: string[];
-  monthNames?: string[];
-}
+import { useState } from "react";
+import { themes } from "./themes";
 
 export interface CalendarProps {
   mode?: "single" | "range";
@@ -36,12 +13,65 @@ export interface CalendarProps {
   disableFutureDates?: boolean;
   disableWeekends?: boolean;
   disableMonthNav?: boolean;
+  // Custom disabled weekdays
+  weekdayOFF?: number[];
+  weekdayOFFColor?: {
+    bg?: string;
+    text?: string;
+    hoverBg?: string;
+  };
+
+  // User callback for disabling dates
   isDateDisabled?: (date: Date) => boolean;
   highlightToday?: boolean;
-  weekStartsOn?: 0 | 1;
-  locale?: CalendarLocale;
-  theme?: CalendarTheme;
+  weekStartsOn?: 0 | 1; // 0 = Sunday, 1 = Monday
+
+  // Holidays
+  holidays?: Date[];
+  holidayColor?: {
+    bg?: string;
+    text?: string;
+    hoverBg?: string;
+  };
+
+  // Localization
+  locale?: {
+    weekDays?: [string, string, string, string, string, string, string];
+    monthNames?: [string, string, string, string, string, string, string, string, string, string, string, string];
+  };
+
+  // Theme
+  theme?: {
+    containerBg?: string;
+    containerBorder?: string;
+
+    selectedBg?: string;
+    selectedText?: string;
+
+    todayBg?: string;
+    todayText?: string;
+
+    normalText?: string;
+    normalHoverBg?: string;
+
+    disabledBg?: string;
+    disabledText?: string;
+
+    borderRadius?: string;
+
+  };
+
+  // Size
   size?: "sm" | "md" | "lg";
+  // theme Name 
+  themeName?: "light" | "dark" | "metallic" | "cyberpunk" | "retro" | "nature";
+
+  // Custom sizing (optional) - overrides size preset
+  customSize?: {
+    box?: number;     // full calendar width/height
+    cell?: number;    // each date cell size
+    gap?: number;     // spacing between cells
+  };
 }
 
 const DEFAULT_THEME: Required<CalendarTheme> = {
@@ -86,23 +116,115 @@ const Calendar = ({
   disableFutureDates = false,
   disableWeekends = false,
   disableMonthNav = false,
+  weekdayOFF = [],
+  weekdayOFFColor = {
+    bg: "bg-gray-100",
+    text: "text-gray-500",
+    hoverBg: "hover:bg-gray-200",
+  },
+
   isDateDisabled,
   highlightToday = true,
   weekStartsOn = 0,
-  locale: userLocale,
-  theme: userTheme,
+
+  holidays = [],
+  holidayColor = {
+    bg: "bg-red-100",
+    text: "text-red-700",
+    hoverBg: "hover:bg-red-200",
+  },
+
+  locale = {
+    weekDays: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+    monthNames: [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+    ],
+  },
+
+  theme = {},
+  themeName = "light",
   size = "md",
+
+  // Destructure customSize
+  customSize,
 }: CalendarProps) => {
-  // Merge props with defaults
-  const theme = useMemo(
-    () => ({ ...DEFAULT_THEME, ...userTheme }),
-    [userTheme]
+  const resolvedTheme = {
+    ...themes[themeName],
+    ...theme, // custom overrides
+  };
+  const [currentMonth, setCurrentMonth] = useState<Date>(
+    selectedDate ?? new Date()
+  );
+  const [activePanel, setActivePanel] = useState<"month" | "year" | null>(null);
+  const [yearPageStart, setYearPageStart] = useState<number>(
+    (selectedDate ?? new Date()).getFullYear() - 6
   );
 
-  const locale = useMemo(
-    () => ({ ...DEFAULT_LOCALE, ...userLocale }),
-    [userLocale]
-  );
+  // Replaced cellSize logic with preset + custom support
+  const presetCellSize =
+    size === "sm"
+      ? "w-8 h-8 text-xs"
+      : size === "lg"
+        ? "w-14 h-14 text-lg"
+        : "w-10 h-10 text-sm"; // md default
+
+  // Custom sizing styles with explicit px units
+  const cellStyle = customSize?.cell
+    ? { width: `${customSize.cell}px`, height: `${customSize.cell}px` }
+    : undefined;
+
+  const gridGap = customSize?.gap ?? 8;
+
+  // Merge holiday color prop with defaults so partial overrides work.
+  const mergedHolidayColor = {
+    bg: "bg-red-100",
+    text: "text-red-700",
+    hoverBg: "hover:bg-red-200",
+    ...holidayColor,
+  };
+  const mergedWeekdayOffColor = {
+    bg: "bg-gray-100",
+    text: "text-gray-500",
+    hoverBg: "hover:bg-gray-200",
+    ...weekdayOFFColor,
+  };
+  // Normalize weekdayOFF into a Set for fast/multiple lookups
+  const weekdayOFFSet = new Set<number>(weekdayOFF ?? []);
+
+  // Helpers
+  const sameDay = (d1: Date | null, d2: Date | null) => {
+    if (!d1 || !d2) return false;
+    return (
+      d1.getDate() === d2.getDate() &&
+      d1.getMonth() === d2.getMonth() &&
+      d1.getFullYear() === d2.getFullYear()
+    );
+  };
+
+  const isToday = (date: Date) => sameDay(date, new Date());
+
+  const isHoliday = (date: Date) => {
+    return holidays.some(holiday => sameDay(holiday, date));
+  };
+
+  const dateIsBefore = (a: Date, b: Date) => {
+    const dateA = new Date(a);
+    const dateB = new Date(b);
+    dateA.setHours(0, 0, 0, 0);
+    dateB.setHours(0, 0, 0, 0);
+    return dateA.getTime() < dateB.getTime();
+  };
 
   const [currentMonth, setCurrentMonth] = useState<Date>(
     selectedDate ?? new Date()
@@ -193,16 +315,26 @@ const Calendar = ({
   };
 
   return (
-    <div className="p-6 bg-white rounded-2xl shadow-lg border border-gray-100 select-none">
+    <div className={`
+    p-6 shadow-lg
+    ${resolvedTheme.containerBg}
+    ${resolvedTheme.containerBorder}
+    rounded-2xl
+  `}
+      style={
+        customSize?.box
+          ? { width: `${customSize.box}px`, height: `${customSize.box}px` }
+          : undefined
+      }>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         {!disableMonthNav && (
           <button
             onClick={() => changeMonth(-1)}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className={`p-2 ${resolvedTheme.normalHoverBg} rounded-full transition-colors`}
             aria-label="Previous month"
           >
-            <svg className="w-6 h-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className={`w-6 h-6 ${resolvedTheme.normalText}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
@@ -211,24 +343,20 @@ const Calendar = ({
         <div className="flex items-center gap-2 mx-auto">
           <button
             type="button"
-            onClick={() => !disableMonthNav && setActivePanel(activePanel === "month" ? null : "month")}
-            className={`font-bold text-xl text-gray-900 px-2 py-1 rounded-lg transition-colors ${
-              disableMonthNav ? "cursor-default" : "hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            }`}
+            onClick={toggleMonthPanel}
+            className={`font-bold text-xl ${resolvedTheme.normalText} px-2 py-1 rounded-lg transition-colors ${disableMonthNav ? "cursor-default" : `${resolvedTheme.normalHoverBg}`
+              }`}
+            aria-label="Select month"
             aria-expanded={activePanel === "month"}
           >
             {locale.monthNames![currentMonth.getMonth()]}
           </button>
           <button
             type="button"
-            onClick={() => {
-                if (disableMonthNav) return;
-                setYearPageStart(currentMonth.getFullYear() - 6);
-                setActivePanel(activePanel === "year" ? null : "year");
-            }}
-            className={`font-bold text-xl text-gray-900 px-2 py-1 rounded-lg transition-colors ${
-              disableMonthNav ? "cursor-default" : "hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            }`}
+            onClick={toggleYearPanel}
+            className={`font-bold text-xl ${resolvedTheme.normalText} px-2 py-1 rounded-lg transition-colors ${disableMonthNav ? "cursor-default" : `${resolvedTheme.normalHoverBg}`
+              }`}
+            aria-label="Select year"
             aria-expanded={activePanel === "year"}
           >
             {currentMonth.getFullYear()}
@@ -238,10 +366,10 @@ const Calendar = ({
         {!disableMonthNav && (
           <button
             onClick={() => changeMonth(1)}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className={`p-2 ${resolvedTheme.normalHoverBg} rounded-full transition-colors`}
             aria-label="Next month"
           >
-            <svg className="w-6 h-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className={`w-6 h-6 ${resolvedTheme.normalText}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </button>
@@ -249,8 +377,8 @@ const Calendar = ({
       </div>
 
       {activePanel === "month" && !disableMonthNav && (
-        <div className="mb-4 p-4 bg-white border border-gray-100 rounded-xl shadow-sm animate-in fade-in slide-in-from-top-2">
-          <div className="grid grid-cols-3 gap-2">
+        <div className={`mb-4 p-4 ${resolvedTheme.containerBg} border ${resolvedTheme.containerBorder} rounded-xl shadow-sm`}>
+          <div className="grid grid-cols-3" style={{ gap: gridGap }}>
             {locale.monthNames!.map((name, index) => {
               const isCurrent = index === currentMonth.getMonth();
               return (
@@ -258,11 +386,10 @@ const Calendar = ({
                   key={name}
                   type="button"
                   onClick={() => setMonth(index)}
-                  className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    isCurrent
-                      ? "bg-blue-600 text-white"
-                      : "text-gray-700 hover:bg-gray-100"
-                  }`}
+                  className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isCurrent
+                    ? `${resolvedTheme.selectedBg} text-white`
+                    : `${resolvedTheme.normalText} ${resolvedTheme.normalHoverBg}`
+                    }`}
                 >
                   {name}
                 </button>
@@ -273,25 +400,25 @@ const Calendar = ({
       )}
 
       {activePanel === "year" && !disableMonthNav && (
-        <div className="mb-4 p-4 bg-white border border-gray-100 rounded-xl shadow-sm animate-in fade-in slide-in-from-top-2">
+        <div className={`mb-4 p-4 ${resolvedTheme.containerBg} border ${resolvedTheme.containerBorder} rounded-xl shadow-sm`}>
           <div className="flex items-center justify-between mb-3">
             <button
               type="button"
               onClick={() => setYearPageStart((prev) => prev - 12)}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`p-2 ${resolvedTheme.normalHoverBg} rounded-full transition-colors`}
               aria-label="Previous years"
             >
               <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
-            <span className="text-sm font-semibold text-gray-700">
+            <span className={`text-sm font-semibold ${resolvedTheme.normalText}`}>
               {yearPageStart} - {yearPageStart + 11}
             </span>
             <button
               type="button"
               onClick={() => setYearPageStart((prev) => prev + 12)}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`p-2 ${resolvedTheme.normalHoverBg} rounded-full transition-colors`}
               aria-label="Next years"
             >
               <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -299,7 +426,10 @@ const Calendar = ({
               </svg>
             </button>
           </div>
-          <div className="grid grid-cols-4 gap-2">
+          <div
+            className="grid grid-cols-4"
+            style={{ gap: gridGap }}
+          >
             {Array.from({ length: 12 }, (_, i) => yearPageStart + i).map(
               (year) => {
                 const isCurrent = year === currentMonth.getFullYear();
@@ -308,11 +438,10 @@ const Calendar = ({
                     key={year}
                     type="button"
                     onClick={() => setYear(year)}
-                    className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      isCurrent
-                        ? "bg-blue-600 text-white"
-                        : "text-gray-700 hover:bg-gray-100"
-                    }`}
+                    className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isCurrent
+                      ? `${resolvedTheme.selectedBg} text-white`
+                      : `${resolvedTheme.normalText} ${resolvedTheme.normalHoverBg}`
+                      }`}
                   >
                     {year}
                   </button>
@@ -323,9 +452,12 @@ const Calendar = ({
         </div>
       )}
 
-      {/* Week days */}
-      <div className="grid grid-cols-7 gap-2 mb-2">
-        {locale.weekDays!.map((d, i) => (
+      {/* Week days - Updated with consistent gap */}
+      <div
+        className="grid grid-cols-7 mb-2"
+        style={{ gap: gridGap }}
+      >
+        {locale.weekDays!.map((d) => (
           <div
             key={`weekday-${i}`}
             className="text-center font-semibold text-gray-600 text-sm py-2"
@@ -336,15 +468,26 @@ const Calendar = ({
         ))}
       </div>
 
-      {/* Grid */}
-      <div className="grid grid-cols-7 gap-2 place-items-center">
-        {days.map((day) => {
+      {/* Grid - Updated with custom gap and cell sizing */}
+      <div
+        className="grid grid-cols-7 place-items-center"
+        style={{ gap: gridGap }}
+      >
+        {days.map((day, i) => {
+          if (!day) return (
+            <div
+              key={i}
+              style={cellStyle}
+              className={customSize ? "" : presetCellSize}
+            />
+          );
+
           const disabled = shouldDisable(day);
           const isSelected =
             mode === "single"
-              ? isSameDay(day, selectedDate)
-              : (selectedRange.start && isSameDay(day, selectedRange.start)) ||
-                (selectedRange.end && isSameDay(day, selectedRange.end));
+              ? sameDay(day, selectedDate)
+              : (selectedRange.start && sameDay(day, selectedRange.start)) ||
+              (selectedRange.end && sameDay(day, selectedRange.end));
 
           const isInRange =
             mode === "range" &&
@@ -358,32 +501,35 @@ const Calendar = ({
             day.getMonth() === currentMonth.getMonth() &&
             day.getFullYear() === currentMonth.getFullYear();
 
+          const isHolidayDate = isHoliday(day);
+          const isWeekdayOff = weekdayOFFSet.has(day.getDay());
+
+          // Determine base styles
+          let baseStyles = isSelected
+            ? `${resolvedTheme.selectedBg} ${resolvedTheme.selectedText} scale-105 shadow-lg`
+            : disabled
+              ? `${resolvedTheme.disabledBg} ${resolvedTheme.disabledText} cursor-not-allowed`
+              : isToday(day) && highlightToday
+                ? `${resolvedTheme.todayBg} ${resolvedTheme.todayText}`
+                : isInRange
+                  ? "bg-blue-50 text-blue-600"
+                  : isWeekdayOff
+                    ? `${mergedWeekdayOffColor.bg} ${mergedWeekdayOffColor.text} ${mergedWeekdayOffColor.hoverBg || ""}`
+                    : isHolidayDate
+                      ? `${mergedHolidayColor.bg} ${mergedHolidayColor.text} ${mergedHolidayColor.hoverBg || ""}`
+                      : `${resolvedTheme.normalText} ${resolvedTheme.normalHoverBg} hover:scale-105`;
+
           return (
             <button
               key={day.toISOString()}
               disabled={disabled}
               onClick={() => handleSelect(day)}
-              aria-label={day.toDateString()}
-              aria-selected={!!isSelected}
-              aria-current={isTodayDate ? "date" : undefined}
+              style={cellStyle}
               className={`
-                inline-flex items-center justify-center font-medium transition-all focus:outline-none focus:ring-2 focus:ring-blue-500
-                ${cellSize}
-                ${theme.borderRadius}
-                ${
-                  !isCurrentMonth ? "opacity-40" : ""
-                }
-                ${
-                  disabled
-                    ? `${theme.disabledBg} ${theme.disabledText} cursor-not-allowed opacity-50`
-                    : isSelected
-                    ? `${theme.selectedBg} ${theme.selectedText} scale-105 shadow-md z-10`
-                    : isTodayDate && highlightToday
-                    ? `${theme.todayBg} ${theme.todayText} font-bold ring-1 ring-blue-200`
-                    : isInRange
-                    ? "bg-blue-50 text-blue-600"
-                    : `${theme.normalText} ${theme.normalHoverBg} hover:scale-105`
-                }
+                inline-flex items-center justify-center font-medium transition-all
+                ${customSize ? "" : presetCellSize}
+                ${resolvedTheme.borderRadius}
+                ${baseStyles}
               `}
             >
               {day.getDate()}
@@ -396,27 +542,35 @@ const Calendar = ({
       {mode === "single" && (
         <div className="mt-6 flex items-center justify-center space-x-6 text-sm">
           <div className="flex items-center">
-            <div className={`w-3 h-3 ${theme.selectedBg} rounded-full mr-2`}></div>
-            <span className="text-gray-600">Selected</span>
+            <div className={`w-4 h-4 rounded mr-2 ${resolvedTheme.selectedBg}`}></div>
+            <span className={resolvedTheme.normalText}>Selected</span>
           </div>
           {highlightToday && (
             <div className="flex items-center">
-              <div className={`w-3 h-3 ${theme.todayBg} rounded-full mr-2 border border-blue-200`}></div>
-              <span className="text-gray-600">Today</span>
+              <div className={`w-4 h-4 rounded mr-2 ${resolvedTheme.todayBg}`}></div>
+              <span className={resolvedTheme.normalText}>Today</span>
             </div>
           )}
+          <div className="flex items-center">
+            <div className={`w-4 h-4 rounded mr-2 ${mergedHolidayColor.bg}`}></div>
+            <span className={mergedHolidayColor.text}>Holiday</span>
+          </div>
         </div>
       )}
 
       {mode === "range" && (
         <div className="mt-6 flex items-center justify-center space-x-6 text-sm">
           <div className="flex items-center">
-            <div className={`w-3 h-3 ${theme.selectedBg} rounded-full mr-2`}></div>
-            <span className="text-gray-600">Start/End</span>
+            <div className={`w-4 h-4 rounded mr-2 ${resolvedTheme.selectedBg}`}></div>
+            <span className={resolvedTheme.normalText}>Selected</span>
           </div>
           <div className="flex items-center">
-            <div className="w-3 h-3 bg-blue-50 border border-blue-200 rounded-full mr-2"></div>
-            <span className="text-gray-600">In Range</span>
+            <div className="w-4 h-4 bg-blue-50 border border-blue-200 rounded mr-2"></div>
+            <span className={resolvedTheme.normalText}>In Range</span>
+          </div>
+          <div className="flex items-center">
+            <div className={`w-4 h-4 rounded mr-2 ${mergedHolidayColor.bg}`}></div>
+            <span className={mergedHolidayColor.text}>Holiday</span>
           </div>
         </div>
       )}
